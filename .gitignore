@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+
+# Entornos virtuales
+venv/
+env/
+
+# Archivos de configuración con credenciales
+.env
+
+# Datos persistentes (Docker stacks)
+stack_data/
+
+# Archivos específicos de la máquina
+STATUS.md
+AUDIT.md
+
+# Tests con credenciales locales
+*tests*
+
+# Logs y temporales
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# IDE y herramientas
+.vscode/
+.idea/
+*.code-workspace
+.claude/

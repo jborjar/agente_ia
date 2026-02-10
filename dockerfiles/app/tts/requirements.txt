@@ -1,0 +1,16 @@
+# =============================================================
+# TTS - Dependencias Python (Coqui)
+# =============================================================
+
+# Framework web y servidor
+fastapi
+uvicorn[standard]
+
+# Manejo de solicitudes (uploads)
+python-multipart
+
+# Coqui TTS para sintesis de voz
+TTS
+
+# Deteccion automatica de idioma
+langdetect

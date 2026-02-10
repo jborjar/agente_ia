@@ -1,0 +1,160 @@
+# =============================================================
+# Agente IA - Stack de servicios de IA
+# =============================================================
+# Servicios puros de inteligencia artificial (APIs stateless):
+#   - nginx: Load balancer para API, STT, TTS y LLM
+#   - api: API unificada (siempre retorna texto + audio)
+#   - stt: Speech to Text (Whisper) - escalable
+#   - tts: Text to Speech (Coqui) - escalable
+#   - llm: Modelos de lenguaje (Ollama) - escalable (max 2)
+#
+# La orquestacion y webhooks estan en el stack "orquestador"
+#
+# Uso:
+#   docker compose build
+#   docker compose up -d
+#   docker compose up -d --scale stt=3 --scale tts=2 --scale llm=2
+# =============================================================
+
+services:
+  # -----------------------------------------------------------
+  # Nginx - Load Balancer para API, STT, TTS y LLM
+  # -----------------------------------------------------------
+  # Distribuye la carga entre multiples instancias
+  #
+  # Puertos internos:
+  #   - 8000: API unificada (balanceado)
+  #   - 8001: STT (balanceado)
+  #   - 8002: TTS (balanceado)
+  #   - 11434: LLM (balanceado)
+  #   - 8080: Health check nginx
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    container_name: agente_ia
+    hostname: agente_ia
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - ./dockerfiles/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - vpn-proxy
+    depends_on:
+      - api
+      - stt
+      - tts
+      - llm
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/nginx-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # -----------------------------------------------------------
+  # API - Orquestador interno STT + LLM + TTS + Vision
+  # -----------------------------------------------------------
+  # Combina los servicios en endpoints unificados
+  # Siempre retorna: { texto, audio_b64, idioma }
+  #
+  # Endpoints:
+  #   - POST /chat: texto → texto + audio
+  #   - POST /voice: audio → texto + audio
+  #   - POST /image: imagen → texto + audio
+  #   - POST /document: PDF/imagen → texto + audio
+  #   - POST /classify: documento → clasificación + audio
+  api:
+    build:
+      context: ./dockerfiles
+      dockerfile: Dockerfile.api
+    image: api-unificada
+    restart: unless-stopped
+    # Sin container_name para permitir replicas
+    environment:
+      - TZ=${TZ}
+      - STT_URL=http://stt:8000
+      - TTS_URL=http://tts:8000
+      - LLM_URL=http://llm:11434
+      - LLM_MODEL=${LLM_CHAT_MODEL:-qwen2.5:7b}
+      - LLM_IMG_MODEL=${LLM_IMG_MODEL:-llava:7b}
+      - SYSTEM_PROMPT=${SYSTEM_PROMPT:-Eres un asistente útil. Responde de forma concisa.}
+    volumes:
+      - ./stack_data/api/app:/app
+    networks:
+      - vpn-proxy
+    depends_on:
+      - stt
+      - tts
+      - llm
+
+  # -----------------------------------------------------------
+  # STT - Speech to Text (Whisper) - ESCALABLE
+  # -----------------------------------------------------------
+  # Transcribe audio a texto con deteccion automatica de idioma
+  # Endpoint: POST /transcribe
+  #
+  # Escalar: docker compose up -d --scale stt=3
+  stt:
+    build:
+      context: ./dockerfiles
+      dockerfile: Dockerfile.stt
+    image: stt-whisper
+    restart: unless-stopped
+    # Sin container_name para permitir replicas
+    environment:
+      - TZ=${TZ}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+    volumes:
+      - ./stack_data/stt/app:/app
+    networks:
+      - vpn-proxy
+
+  # -----------------------------------------------------------
+  # LLM - Modelos de Lenguaje (Ollama) - ESCALABLE (max 2)
+  # -----------------------------------------------------------
+  # Servidor de modelos de lenguaje
+  # IMPORTANTE: Cada instancia carga los modelos en memoria
+  # Maximo 2 instancias recomendado por uso de RAM
+  #
+  # Modelos recomendados:
+  #   - qwen2.5:7b (chat) ~5GB RAM
+  #   - llava:7b (vision) ~5GB RAM
+  #
+  # Escalar: docker compose up -d --scale llm=2
+  llm:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    # Sin container_name para permitir replicas
+    environment:
+      - TZ=${TZ}
+      - OLLAMA_MODELS=/ollama/models
+    volumes:
+      - ./stack_data/llm/models:/ollama/models
+    networks:
+      - vpn-proxy
+
+  # -----------------------------------------------------------
+  # TTS - Text to Speech (Coqui) - ESCALABLE
+  # -----------------------------------------------------------
+  # Sintetiza texto a audio con seleccion automatica de modelo por idioma
+  # Endpoint: POST /synthesize
+  #
+  # Escalar: docker compose up -d --scale tts=2
+  tts:
+    build:
+      context: ./dockerfiles
+      dockerfile: Dockerfile.tts
+    image: tts-coqui
+    restart: unless-stopped
+    # Sin container_name para permitir replicas
+    environment:
+      - TZ=${TZ}
+      - COQUI_TTS_MODEL=${COQUI_TTS_MODEL:-tts_models/es/css10/vits}
+    volumes:
+      - ./stack_data/tts/app:/app
+    networks:
+      - vpn-proxy
+
+# Red externa compartida con otros stacks
+networks:
+  vpn-proxy:
+    external: true

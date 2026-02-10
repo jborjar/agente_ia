@@ -1,0 +1,38 @@
+# =============================================================
+# TTS - Text to Speech (Coqui TTS)
+# =============================================================
+# Servicio de sintesis de voz usando Coqui TTS
+# - Soporta multiples idiomas con deteccion automatica
+# - Modelo configurable via COQUI_TTS_MODEL
+# - Modelo por defecto: tts_models/es/css10/vits (espanol)
+# =============================================================
+
+FROM python:3.11-slim
+
+ENV TZ=America/Mexico_City
+ENV LANG=es_MX.UTF-8
+
+WORKDIR /app
+
+# Dependencias del sistema
+# - ffmpeg: conversion de audio
+# - git: requerido por algunos modelos de Coqui
+# - libsndfile1: manejo de archivos de audio
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    git \
+    libsndfile1 \
+    locales \
+    && sed -i '/es_MX.UTF-8/s/^# //g' /etc/locale.gen \
+    && locale-gen \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY app/tts/requirements.txt .
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 8000
+
+# Endpoint: POST /synthesize { texto, idioma? } -> audio WAV
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

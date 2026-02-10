@@ -1,0 +1,34 @@
+# =============================================================
+# STT - Speech to Text (Whisper)
+# =============================================================
+# Servicio de transcripcion de audio usando OpenAI Whisper
+# - Soporta multiples idiomas con deteccion automatica
+# - Modelo configurable via WHISPER_MODEL (tiny, base, small, medium, large)
+# =============================================================
+
+FROM python:3.11-slim
+
+ENV TZ=America/Mexico_City
+ENV LANG=es_MX.UTF-8
+
+# Instalar ffmpeg (requerido por Whisper) y dependencias del sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    build-essential \
+    locales \
+    && sed -i '/es_MX.UTF-8/s/^# //g' /etc/locale.gen \
+    && locale-gen \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copiamos requirements para aprovechar cache de Docker
+COPY app/stt/requirements.txt .
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 8000
+
+# Endpoint: POST /transcribe (audio file) -> { texto, idioma }
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

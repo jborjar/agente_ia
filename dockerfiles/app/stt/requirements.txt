@@ -1,0 +1,17 @@
+# =============================================================
+# STT - Dependencias Python (Whisper)
+# =============================================================
+
+# Framework web y servidor
+fastapi
+uvicorn[standard]
+
+# Manejo de archivos de audio (uploads)
+python-multipart
+
+# OpenAI Whisper para transcripcion
+openai-whisper
+
+# PyTorch (requerido por Whisper)
+torch
+torchaudio

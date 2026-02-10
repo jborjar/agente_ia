@@ -84,36 +84,53 @@ curl http://agente_ia:11434         # LLM
 
 ## Arquitectura
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                          AGENTE_IA                               │
-│                    (Servicios de IA puros)                       │
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                     Nginx (Load Balancer)                    ││
-│  │            :8001 (STT)  :8002 (TTS)  :11434 (LLM)           ││
-│  └──────────────┬───────────────┬───────────────┬──────────────┘│
-│                 │               │               │                │
-│      ┌──────────┼─────┐  ┌──────┼─────┐  ┌──────┼─────┐         │
-│      v          v     v  v      v     v  v      v     v         │
-│  ┌───────┐ ┌───────┐  ┌───────┐ ┌───────┐  ┌───────┐ ┌───────┐ │
-│  │ STT 1 │ │ STT 2 │  │ TTS 1 │ │ TTS 2 │  │ LLM 1 │ │ LLM 2 │ │
-│  │Whisper│ │Whisper│  │ Coqui │ │ Coqui │  │Ollama │ │Ollama │ │
-│  └───────┘ └───────┘  └───────┘ └───────┘  └───────┘ └───────┘ │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-                                ▲
-                                │ HTTP
-                                │
-┌───────────────────────────────┴─────────────────────────────────┐
-│                         ORQUESTADOR                              │
-│                (Webhooks, cola, orquestacion)                    │
-│                                                                  │
-│    WhatsApp ─► Webhook ─► Redis ─► Workers ─► Respuesta         │
-│    Telegram ─►                                                   │
-│    Web API ─►                                                    │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph AGENTE_IA["AGENTE_IA (Servicios de IA puros)"]
+        subgraph LB["Nginx Load Balancer"]
+            P8000[":8000 API"]
+            P8001[":8001 STT"]
+            P8002[":8002 TTS"]
+            P11434[":11434 LLM"]
+        end
+
+        subgraph API["API Unificada"]
+            API1["api"]
+        end
+
+        subgraph STT["STT (Whisper)"]
+            STT1["stt-1"]
+            STT2["stt-2"]
+        end
+
+        subgraph TTS["TTS (Coqui)"]
+            TTS1["tts-1"]
+            TTS2["tts-2"]
+        end
+
+        subgraph LLM["LLM (Ollama)"]
+            LLM1["llm-1"]
+            LLM2["llm-2"]
+        end
+
+        P8000 --> API1
+        P8001 --> STT1 & STT2
+        P8002 --> TTS1 & TTS2
+        P11434 --> LLM1 & LLM2
+    end
+
+    subgraph ORQ["ORQUESTADOR (Webhooks, cola, orquestacion)"]
+        WH["Webhook"]
+        RD["Redis"]
+        WK["Workers"]
+
+        WA["WhatsApp"] --> WH
+        TG["Telegram"] --> WH
+        WEB["Web API"] --> WH
+        WH --> RD --> WK
+    end
+
+    WK <-->|HTTP| LB
 ```
 
 ## Instalacion

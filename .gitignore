@@ -17,8 +17,16 @@ env/
 # Archivos de configuración con credenciales
 .env
 
-# Datos persistentes (Docker stacks)
-stack_data/
+# Bases de datos y datos persistentes (NO subir)
+*.db
+*.sqlite
+*.sqlite3
+*.rdb
+appendonlydir/
+dump.rdb
+
+# Modelos de ML (muy pesados, NO subir)
+stack_data/llm/
 
 # Archivos específicos de la máquina
 STATUS.md

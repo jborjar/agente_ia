@@ -77,6 +77,8 @@ services:
       - LLM_MODEL=${LLM_CHAT_MODEL:-qwen2.5:7b}
       - LLM_IMG_MODEL=${LLM_IMG_MODEL:-llava:7b}
       - SYSTEM_PROMPT=${SYSTEM_PROMPT:-Eres un asistente útil. Responde de forma concisa.}
+      # Redis del orquestador para guardar idioma del usuario
+      - REDIS_URL=${REDIS_URL:-redis://:orquestador123@redis-orquestador:6379/0}
     volumes:
       - ./stack_data/api/app:/app
     networks:

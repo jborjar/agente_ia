@@ -38,7 +38,7 @@ services:
     volumes:
       - ./dockerfiles/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
-      - vpn-proxy
+      - agente_ia
     depends_on:
       - api
       - stt
@@ -82,7 +82,7 @@ services:
     volumes:
       - ./stack_data/api/app:/app
     networks:
-      - vpn-proxy
+      - agente_ia
     depends_on:
       - stt
       - tts
@@ -108,7 +108,7 @@ services:
     volumes:
       - ./stack_data/stt/app:/app
     networks:
-      - vpn-proxy
+      - agente_ia
 
   # -----------------------------------------------------------
   # LLM - Modelos de Lenguaje (Ollama) - ESCALABLE (max 2)
@@ -132,7 +132,7 @@ services:
     volumes:
       - ./stack_data/llm/models:/ollama/models
     networks:
-      - vpn-proxy
+      - agente_ia
 
   # -----------------------------------------------------------
   # TTS - Text to Speech (Coqui) - ESCALABLE
@@ -154,9 +154,9 @@ services:
     volumes:
       - ./stack_data/tts/app:/app
     networks:
-      - vpn-proxy
+      - agente_ia
 
 # Red externa compartida con otros stacks
 networks:
-  vpn-proxy:
+  agente_ia:
     external: true

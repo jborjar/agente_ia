@@ -25,7 +25,8 @@ WORKDIR /app
 # Copiamos requirements para aprovechar cache de Docker
 COPY app/stt/requirements.txt .
 
-RUN pip install --no-cache-dir --upgrade pip \
+# setuptools necesario para algunas dependencias
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 8000

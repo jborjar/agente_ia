@@ -28,6 +28,9 @@ dump.rdb
 # Modelos de ML (muy pesados, NO subir)
 stack_data/llm/
 
+# Base vectorial Qdrant (datos persistentes, NO subir)
+stack_data/qdrant/
+
 # Archivos específicos de la máquina
 STATUS.md
 AUDIT.md

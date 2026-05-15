@@ -7,6 +7,7 @@
 #   - stt: Speech to Text (Whisper) - escalable
 #   - tts: Text to Speech (Coqui) - escalable
 #   - llm: Modelos de lenguaje (Ollama) - escalable (max 2)
+#   - qdrant: Base de datos vectorial para RAG
 #
 # La orquestacion y webhooks estan en el stack "orquestador"
 #
@@ -37,6 +38,10 @@ services:
       - TZ=${TZ}
     volumes:
       - ./dockerfiles/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      # API unificada (/ingest, /ask, /chat, /voice, /document, etc.)
+      # Puerto 8100 en host porque 8000 lo usa el orquestador
+      - "8100:8000"
     networks:
       - agente_ia
     depends_on:
@@ -76,9 +81,13 @@ services:
       - LLM_URL=http://llm:11434
       - LLM_MODEL=${LLM_CHAT_MODEL:-qwen2.5:7b}
       - LLM_IMG_MODEL=${LLM_IMG_MODEL:-llava:7b}
+      - LLM_EMBED_MODEL=${LLM_EMBED_MODEL:-nomic-embed-text}
       - SYSTEM_PROMPT=${SYSTEM_PROMPT:-Eres un asistente útil. Responde de forma concisa.}
       # Redis del orquestador para guardar idioma del usuario
       - REDIS_URL=${REDIS_URL:-redis://:orquestador123@redis-orquestador:6379/0}
+      # Qdrant para RAG (base vectorial)
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-qdrant123}
     volumes:
       - ./stack_data/api/app:/app
     networks:
@@ -87,6 +96,7 @@ services:
       - stt
       - tts
       - llm
+      - qdrant
 
   # -----------------------------------------------------------
   # STT - Speech to Text (Whisper) - ESCALABLE
@@ -129,6 +139,12 @@ services:
     environment:
       - TZ=${TZ}
       - OLLAMA_MODELS=/ollama/models
+      # Mantener modelos cargados en memoria para evitar tiempos de carga
+      # de ~35s cada vez que se alterna entre chat y embeddings
+      - OLLAMA_KEEP_ALIVE=24h
+      # Permitir hasta 3 modelos cargados al mismo tiempo
+      # (chat + vision + embeddings)
+      - OLLAMA_MAX_LOADED_MODELS=3
     volumes:
       - ./stack_data/llm/models:/ollama/models
     networks:
@@ -155,6 +171,35 @@ services:
       - ./stack_data/tts/app:/app
     networks:
       - agente_ia
+
+  # -----------------------------------------------------------
+  # Qdrant - Base de datos vectorial para RAG
+  # -----------------------------------------------------------
+  # Almacena embeddings de documentos para busqueda semantica
+  # Una coleccion por contexto (ej. manuales, leyes, sat, etc.)
+  #
+  # Puertos internos:
+  #   - 6333: API REST
+  #   - 6334: gRPC (no usado)
+  #
+  # Dashboard web: http://qdrant:6333/dashboard
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    container_name: qdrant
+    hostname: qdrant
+    environment:
+      - TZ=${TZ}
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-qdrant123}
+    volumes:
+      - ./stack_data/qdrant:/qdrant/storage
+    networks:
+      - agente_ia
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 # Red externa compartida con otros stacks
 networks:

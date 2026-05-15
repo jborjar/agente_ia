@@ -1,11 +1,12 @@
 # =============================================================
-# API Unificada - Orquesta STT, LLM y TTS
+# API Unificada - Orquesta STT, LLM, TTS y RAG (Qdrant)
 # =============================================================
 # Servicio que combina STT, LLM y TTS en un solo endpoint
 # - Siempre retorna texto + audio (OGG base64)
 # - ffmpeg para conversion WAV → OGG Opus
 # - poppler para PDF → imagenes
 # - libreoffice para Office → PDF
+# - tesseract para OCR (rapido, indexacion RAG)
 # =============================================================
 
 FROM python:3.11-slim
@@ -13,13 +14,16 @@ FROM python:3.11-slim
 ENV TZ=America/Mexico_City
 ENV LANG=es_MX.UTF-8
 
-# Instalar ffmpeg, poppler, libreoffice y locales
+# Instalar ffmpeg, poppler, libreoffice, tesseract y locales
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     poppler-utils \
     libreoffice-writer \
     libreoffice-calc \
     libreoffice-impress \
+    tesseract-ocr \
+    tesseract-ocr-spa \
+    tesseract-ocr-eng \
     locales \
     && sed -i '/es_MX.UTF-8/s/^# //g' /etc/locale.gen \
     && locale-gen \

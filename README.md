@@ -7,10 +7,11 @@ Stack de servicios de inteligencia artificial. Provee APIs stateless para proces
 | Servicio | Puerto | Descripcion | Escalable |
 |----------|--------|-------------|-----------|
 | nginx | 8000/8001/8002/11434 | Load balancer API/STT/TTS/LLM | - |
-| api | - | API unificada (texto + audio) | Horizontal |
+| api | - | API unificada (texto + audio + RAG) | Horizontal |
 | stt | - | Speech to Text (Whisper) | Horizontal |
-| llm | - | Modelos de lenguaje (Ollama) | Horizontal (max 2) |
+| llm | - | Modelos de lenguaje + embeddings (Ollama) | Horizontal (max 2) |
 | tts | - | Text to Speech (Coqui) | Horizontal |
+| qdrant | 6333 (interno) | Base vectorial para RAG | No |
 
 ## Capacidades
 
@@ -18,7 +19,7 @@ Stack de servicios de inteligencia artificial. Provee APIs stateless para proces
 
 | Caracteristica | Detalle |
 |----------------|---------|
-| Endpoints | `/chat`, `/voice`, `/image`, `/document`, `/classify` |
+| Endpoints | `/chat`, `/voice`, `/image`, `/document`, `/classify`, `/ingest`, `/ask`, `/colecciones`, `/colecciones/{nombre}/documentos` |
 | Audio entrada | WAV, OGG, MP3, M4A, FLAC, Opus |
 | Imagen entrada | PNG, JPEG, GIF, WebP |
 | Documento entrada | PDF, DOCX, DOC, XLSX, XLS, PPTX, PPT |
@@ -31,6 +32,8 @@ Stack de servicios de inteligencia artificial. Provee APIs stateless para proces
 - `/image`: imagen → LLM Vision → TTS → OGG → respuesta
 - `/document`: Office/PDF/imagen → LLM Vision → TTS → OGG → respuesta
 - `/classify`: documento → clasificación → TTS → OGG → respuesta
+- `/ingest`: documento → OCR (Tesseract / fallback llava) → chunks → embeddings → Qdrant
+- `/ask`: pregunta → embedding → busqueda Qdrant → LLM con contexto → TTS → respuesta + fuentes
 
 **Nota:** El audio de salida es OGG Opus en base64 porque es el formato nativo de WhatsApp para notas de voz.
 
@@ -185,6 +188,11 @@ COQUI_TTS_MODEL=tts_models/es/css10/vits
 LLM_CHAT_MODEL=qwen2.5:7b
 LLM_IMG_MODEL=llava:7b
 LLM_DOCS_MODEL=llava:7b
+LLM_EMBED_MODEL=nomic-embed-text
+
+# Qdrant - Base vectorial para RAG
+QDRANT_URL=http://qdrant:6333
+QDRANT_API_KEY=qdrant123
 ```
 
 ### Modelos Whisper
@@ -313,6 +321,102 @@ GET http://agente_ia:8000/health
 GET http://agente_ia:8000/tipos-documento
 ```
 
+### RAG - Aprendizaje de documentos (Qdrant)
+
+Permite indexar documentos y luego hacer preguntas que se respondan con base en su contenido.
+
+**Acceso:**
+- Desde el host: `http://localhost:8100/...`
+- Desde otro stack docker: `http://agente_ia:8000/...`
+
+**Flujo:**
+1. `POST /ingest` con un documento y una `coleccion` → se extrae texto (Tesseract a 300 DPI, llava como fallback), se divide en chunks, se generan embeddings con `nomic-embed-text` y se guardan en Qdrant. Si el documento ya existe (por **nombre** o **hash de contenido**) se reemplaza automaticamente.
+2. `POST /ask` con una `pregunta` y la `coleccion` → se busca el contexto mas relevante y el LLM responde citando las fuentes. Opcionalmente se puede filtrar por `doc_id` o `doc_nombre`.
+
+```bash
+# Indexar un documento en una coleccion
+POST /ingest
+Content-Type: multipart/form-data
+archivo: <PDF, DOCX, XLSX, PPTX o imagen>
+coleccion: "documentos-sat"
+
+# Respuesta
+{
+  "coleccion": "documentos-sat",
+  "doc_id": "73b20445-313f-43dd-9797-7076d77d3500",
+  "doc_nombre": "Csf_BORJ720323KD9.pdf",
+  "doc_hash": "3f34bf8eb2a2378f",
+  "chunks_indexados": 7,
+  "metodo_extraccion": "tesseract",
+  "reemplazo": false,
+  "reemplazo_por": null
+}
+
+# Si vuelves a subir el mismo archivo (mismo nombre o mismo hash):
+#   "reemplazo": true,
+#   "reemplazo_por": "nombre" | "contenido" | "nombre+contenido"
+```
+
+```bash
+# Preguntar sobre toda la coleccion
+POST /ask
+Content-Type: application/json
+{
+  "pregunta": "Cual es la razon social?",
+  "coleccion": "documentos-sat",
+  "top_k": 5,
+  "idioma": "es"
+}
+
+# Preguntar sobre UN documento especifico (filtrado)
+POST /ask
+{
+  "pregunta": "Cual es la razon social?",
+  "coleccion": "documentos-sat",
+  "doc_id": "73b20445-...",
+  "top_k": 5
+}
+# Alternativa: filtrar por nombre de archivo
+{
+  "pregunta": "Cual es la razon social?",
+  "coleccion": "documentos-sat",
+  "doc_nombre": "Csf_BORJ720323KD9.pdf"
+}
+
+# Respuesta
+{
+  "texto": "JORGE BORJA ROJAS",
+  "audio_b64": "T2dnUwACAA...",
+  "idioma": "es",
+  "fuentes": [
+    {
+      "doc_id": "73b20445-...",
+      "doc_nombre": "Csf_BORJ720323KD9.pdf",
+      "chunk_idx": 0,
+      "score": 0.81,
+      "snippet": "..."
+    }
+  ]
+}
+```
+
+```bash
+# Listar colecciones
+GET /colecciones
+
+# Listar documentos dentro de una coleccion
+GET /colecciones/documentos-sat/documentos
+# → {"coleccion":"...", "documentos":[{"doc_id":"...","doc_nombre":"...","doc_hash":"...","chunks":7}]}
+
+# Borrar un documento individual (todos sus chunks)
+DELETE /colecciones/documentos-sat/documentos/{doc_id}
+
+# Borrar una coleccion completa
+DELETE /colecciones/documentos-sat
+```
+
+**Dashboard de Qdrant** (solo desde la red interna): http://qdrant:6333/dashboard
+
 ### STT - Speech to Text
 
 Acepta cualquier formato de audio (WAV, OGG, MP3, M4A, FLAC, Opus, WebM).
@@ -411,7 +515,8 @@ agente_ia/
     ├── api/app/main.py
     ├── stt/app/main.py
     ├── tts/app/main.py
-    └── llm/models/
+    ├── llm/models/
+    └── qdrant/         (datos persistentes de la base vectorial)
 ```
 
 ## Integracion con Orquestador

@@ -24,7 +24,7 @@ fi
 
 # Crear directorios de datos
 echo "Creando directorios de datos..."
-mkdir -p stack_data/{stt/app,llm/models,tts/app}
+mkdir -p stack_data/{stt/app,llm/models,tts/app,qdrant}
 
 # Verificar red externa
 if ! docker network inspect vpn-proxy >/dev/null 2>&1; then
@@ -70,6 +70,11 @@ if [ "$LLM_DOCS" != "$LLM_CHAT" ] && [ "$LLM_DOCS" != "$LLM_IMG" ]; then
     docker exec llm ollama pull "$LLM_DOCS" || echo "Modelo $LLM_DOCS ya existe o error"
 fi
 
+# Modelo de embeddings para RAG
+LLM_EMBED=${LLM_EMBED_MODEL:-nomic-embed-text}
+echo "Descargando modelo de embeddings: $LLM_EMBED"
+docker exec llm ollama pull "$LLM_EMBED" || echo "Modelo $LLM_EMBED ya existe o error"
+
 echo "Modelos instalados:"
 docker exec llm ollama list
 
@@ -114,14 +119,21 @@ echo ""
 docker compose ps
 echo ""
 echo "Servicios de IA:"
-echo "  - stt (Whisper): POST http://stt:8000/transcribe"
-echo "  - llm (Ollama):  POST http://llm:11434/api/chat"
-echo "  - tts (Coqui):   POST http://tts:8000/synthesize"
+echo "  - stt (Whisper):     POST http://stt:8000/transcribe"
+echo "  - llm (Ollama):      POST http://llm:11434/api/chat"
+echo "  - tts (Coqui):       POST http://tts:8000/synthesize"
+echo "  - qdrant (vectorial): http://qdrant:6333"
+echo ""
+echo "RAG (via api unificada):"
+echo "  - POST http://agente_ia:8000/ingest      (subir documento)"
+echo "  - POST http://agente_ia:8000/ask         (preguntar)"
+echo "  - GET  http://agente_ia:8000/colecciones (listar)"
 echo ""
 echo "Modelos configurados:"
-echo "  - Chat: $LLM_CHAT"
-echo "  - Vision: $LLM_IMG"
+echo "  - Chat:       $LLM_CHAT"
+echo "  - Vision:     $LLM_IMG"
 echo "  - Documentos: $LLM_DOCS"
+echo "  - Embeddings: $LLM_EMBED"
 echo ""
 echo "NOTA: Este stack solo provee servicios de IA."
 echo "      Para webhooks y orquestacion, usar el stack orchestrator."
